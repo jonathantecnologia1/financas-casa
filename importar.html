@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Importar dados – Finanças da Casa</title>
+<style>
+body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:520px;margin:40px auto;padding:0 20px;color:#1b2a22;background:#eef2ec}
+button{font:inherit;border:0;border-radius:12px;padding:12px 18px;background:#2c6a4c;color:#fff;font-weight:700;cursor:pointer}
+button:disabled{opacity:.5}
+#log{white-space:pre-wrap;background:#fff;border-radius:12px;padding:12px;margin-top:16px;min-height:60px}
+</style>
+</head>
+<body>
+<h1>Importar dados</h1>
+<p>Use esta página <b>uma única vez</b>, para trazer os lançamentos que já existiam. Os lançamentos ficam registrados como feitos pela conta que importar.</p>
+<p><button id="entrar">1. Entrar com Google</button></p>
+<p><input type="file" id="arq" accept=".json" disabled> <br><small>2. Escolha o arquivo dados.json</small></p>
+<p><button id="importar" disabled>3. Importar</button></p>
+<div id="log">Aguardando…</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+firebase.initializeApp(window.FIREBASE_CONFIG);
+const auth=firebase.auth(),fs=firebase.firestore(),log=t=>document.getElementById("log").textContent=t;
+let dados=null;
+auth.onAuthStateChanged(u=>{if(u){log("Conectado como "+u.email+". Agora escolha o arquivo.");document.getElementById("arq").disabled=false}});
+document.getElementById("entrar").onclick=()=>auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e=>log("Erro ao entrar: "+e.message));
+document.getElementById("arq").onchange=async e=>{
+  try{dados=JSON.parse(await e.target.files[0].text());log(Object.keys(dados.lancamentos||{}).length+" lançamentos encontrados. Toque em Importar.");document.getElementById("importar").disabled=false}
+  catch(err){log("Arquivo inválido: "+err.message)}
+};
+document.getElementById("importar").onclick=async()=>{
+  const b=document.getElementById("importar");b.disabled=true;
+  const uid=auth.currentUser.uid,ents=Object.entries(dados.lancamentos||{});
+  try{
+    await fs.collection("usuarios").doc(uid).set({name:(auth.currentUser.displayName||"").split(" ")[0],email:auth.currentUser.email},{merge:true});
+    for(let i=0;i<ents.length;i+=400){
+      const lote=fs.batch();
+      for(const [id,d] of ents.slice(i,i+400)) lote.set(fs.collection("lancamentos").doc(id),{...d,by:uid});
+      await lote.commit();log("Importados "+Math.min(i+400,ents.length)+" de "+ents.length+"…");
+    }
+    for(const [id,d] of Object.entries(dados.config||{})) await fs.collection("config").doc(id).set(d);
+    log("Pronto! "+ents.length+" lançamentos importados. Pode fechar esta página e abrir o sistema.");
+  }catch(err){log("Erro: "+err.message+"\nConfira se o seu e-mail está na lista do firestore.rules.");b.disabled=false}
+};
+</script>
+</body>
+</html>

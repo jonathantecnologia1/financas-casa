@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Só quem estiver nesta lista consegue ver e lançar. Coloque os e-mails Google da casa.
+    function permitido() {
+      return request.auth != null
+        && request.auth.token.email in [
+          'seu-email@gmail.com',
+          'email-da-bianca@gmail.com'
+        ];
+    }
+    match /{document=**} {
+      allow read, write: if permitido();
+    }
+  }
+}
