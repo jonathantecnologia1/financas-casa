@@ -27,7 +27,8 @@ firebase.initializeApp(window.FIREBASE_CONFIG);
 const auth=firebase.auth(),fs=firebase.firestore(),log=t=>document.getElementById("log").textContent=t;
 let dados=null;
 auth.onAuthStateChanged(u=>{if(u){log("Conectado como "+u.email+". Agora escolha o arquivo.");document.getElementById("arq").disabled=false}});
-document.getElementById("entrar").onclick=()=>auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e=>log("Erro ao entrar: "+e.message));
+document.getElementById("entrar").onclick=()=>{const p=new firebase.auth.GoogleAuthProvider();p.setCustomParameters({prompt:"select_account"});auth.signInWithPopup(p).catch(e=>{if(/popup/.test(e.code||""))auth.signInWithRedirect(p);else log("Erro ao entrar: "+e.message)})};
+auth.getRedirectResult().catch(e=>log("Erro ao entrar: "+e.message));
 document.getElementById("arq").onchange=async e=>{
   try{dados=JSON.parse(await e.target.files[0].text());log(Object.keys(dados.lancamentos||{}).length+" lançamentos encontrados. Toque em Importar.");document.getElementById("importar").disabled=false}
   catch(err){log("Arquivo inválido: "+err.message)}
