@@ -14,39 +14,53 @@ button:disabled{opacity:.5}
 <body>
 <h1>Importar dados</h1>
 <p>Use esta página <b>uma única vez</b>, para trazer os lançamentos que já existiam. Os lançamentos ficam registrados como feitos pela conta que importar.</p>
-<p><button id="entrar">1. Entrar com Google</button></p>
+<p>1. Entre com Google:</p>
+<div id="botaoGoogle" style="min-height:44px"></div>
 <p><input type="file" id="arq" accept=".json" disabled> <br><small>2. Escolha o arquivo dados.json</small></p>
 <p><button id="importar" disabled>3. Importar</button></p>
 <div id="log">Aguardando…</div>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js"></script>
+<script src="config.js"></script>
 <script>
-firebase.initializeApp(window.FIREBASE_CONFIG);
-const auth=firebase.auth(),fs=firebase.firestore(),log=t=>document.getElementById("log").textContent=t;
-let dados=null;
-auth.onAuthStateChanged(u=>{if(u){log("Conectado como "+u.email+". Agora escolha o arquivo.");document.getElementById("arq").disabled=false}});
-document.getElementById("entrar").onclick=()=>{const p=new firebase.auth.GoogleAuthProvider();p.setCustomParameters({prompt:"select_account"});auth.signInWithPopup(p).catch(e=>{if(/popup/.test(e.code||""))auth.signInWithRedirect(p);else log("Erro ao entrar: "+e.message)})};
-auth.getRedirectResult().catch(e=>log("Erro ao entrar: "+e.message));
+const CFG=window.FINANCAS||{},log=t=>document.getElementById("log").textContent=t;
+let token=null,eu=null,dados=null;
+async function api(acao,extra){
+  const r=await (await fetch(CFG.API,{method:"POST",body:JSON.stringify({acao,token,...extra})})).json();
+  if(r.erro) throw new Error(r.erro);
+  return r;
+}
+async function entrar(credencial){
+  token=credencial;log("Conferindo sua conta…");
+  try{
+    const r=await api("dados",{});eu=r.eu;
+    const ja=Object.keys((r.docs&&r.docs.lancamentos)||{}).length;
+    log("Conectado como "+eu.id+"."+(ja?" Atenção: já existem "+ja+" lançamentos na planilha; os do arquivo serão somados (os de mesmo código são substituídos).":"")+"\nAgora escolha o arquivo.");
+    document.getElementById("arq").disabled=false;
+  }catch(e){log("Erro ao entrar: "+e.message)}
+}
+function iniciarGoogle(){
+  if(!CFG.API||!CFG.CLIENT_ID){log("Falta preencher o config.js.");return}
+  google.accounts.id.initialize({client_id:CFG.CLIENT_ID,callback:r=>entrar(r.credential)});
+  google.accounts.id.renderButton(document.getElementById("botaoGoogle"),{theme:"filled_blue",size:"large",shape:"pill",text:"signin_with",locale:"pt-BR"});
+}
 document.getElementById("arq").onchange=async e=>{
   try{dados=JSON.parse(await e.target.files[0].text());log(Object.keys(dados.lancamentos||{}).length+" lançamentos encontrados. Toque em Importar.");document.getElementById("importar").disabled=false}
   catch(err){log("Arquivo inválido: "+err.message)}
 };
 document.getElementById("importar").onclick=async()=>{
   const b=document.getElementById("importar");b.disabled=true;
-  const uid=auth.currentUser.uid,ents=Object.entries(dados.lancamentos||{});
+  const ops=[
+    ...Object.entries(dados.lancamentos||{}).map(([id,d])=>({op:"set",col:"lancamentos",id,data:{...d,by:eu.id}})),
+    ...Object.entries(dados.config||{}).map(([id,d])=>({op:"set",col:"config",id,data:d}))
+  ];
   try{
-    await fs.collection("usuarios").doc(uid).set({name:(auth.currentUser.displayName||"").split(" ")[0],email:auth.currentUser.email},{merge:true});
-    for(let i=0;i<ents.length;i+=400){
-      const lote=fs.batch();
-      for(const [id,d] of ents.slice(i,i+400)) lote.set(fs.collection("lancamentos").doc(id),{...d,by:uid});
-      await lote.commit();log("Importados "+Math.min(i+400,ents.length)+" de "+ents.length+"…");
+    for(let i=0;i<ops.length;i+=300){
+      await api("gravar",{ops:ops.slice(i,i+300)});
+      log("Importados "+Math.min(i+300,ops.length)+" de "+ops.length+"…");
     }
-    for(const [id,d] of Object.entries(dados.config||{})) await fs.collection("config").doc(id).set(d);
-    log("Pronto! "+ents.length+" lançamentos importados. Pode fechar esta página e abrir o sistema.");
-  }catch(err){log("Erro: "+err.message+"\nConfira se o seu e-mail está na lista do firestore.rules.");b.disabled=false}
+    log("Pronto! "+ops.length+" registros importados. Pode fechar esta página e abrir o sistema.");
+  }catch(err){log("Erro: "+err.message);b.disabled=false}
 };
 </script>
+<script src="https://accounts.google.com/gsi/client" async onload="iniciarGoogle()"></script>
 </body>
 </html>

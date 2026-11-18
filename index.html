@@ -276,38 +276,170 @@ nav a.on span{background:var(--forest);color:var(--forest-ink)}
   <div style="font-size:54px">🏡</div>
   <h1>Finanças da Casa</h1>
   <p id="loginMsg">Entre com sua conta Google para ver e lançar as contas da casa.</p>
-  <button class="btn" id="loginBtn">Entrar com Google</button>
+  <div id="botaoGoogle" style="min-height:44px"></div>
 </div>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js"></script>
+<script src="config.js"></script>
 <script>
+// Conversa com a planilha do Google (Apps Script), no mesmo esquema do Portal da Mídia.
+// Imita a parte do Firestore que o sistema usa, para o resto do código continuar igual.
 (function(){
-  firebase.initializeApp(window.FIREBASE_CONFIG);
-  const auth=firebase.auth(),fs=firebase.firestore();
+  const CFG=window.FINANCAS||{},API=CFG.API||"",CLIENT_ID=CFG.CLIENT_ID||"";
+  const CHAVE="financas_login",el=id=>document.getElementById(id);
+  const box=el("login"),msg=el("loginMsg");
+  let token=null,eu=null,versao=null,carregado=false,mudancasLocais=0;
+  let docs={lancamentos:{},config:{}},nomes={};
+  const ouvintes=new Set();
   let pronto;const ok=new Promise(r=>pronto=r);
-  const user={
-    me:async()=>({id:auth.currentUser.uid}),
-    can:async()=>true,
-    profiles:async ids=>{const out={};await Promise.all(ids.map(async id=>{try{const s=await fs.collection("usuarios").doc(id).get();out[id]={name:s.exists?s.data().name:null}}catch(e){out[id]={name:null}}}));return out}
-  };
-  window.claude={use:n=>ok.then(()=>n==="db"?fs:n==="user"?user:null)};
-  const box=document.getElementById("login"),msg=document.getElementById("loginMsg"),btn=document.getElementById("loginBtn");
-  auth.onAuthStateChanged(async u=>{
-    if(!u){box.hidden=false;return}
+  const aviso=t=>{try{if(typeof toast==="function")toast(t)}catch(e){}};
+
+  const validade=t=>{try{return JSON.parse(atob(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).exp*1000}catch(e){return 0}};
+  try{const t=localStorage.getItem(CHAVE);if(t&&validade(t)-Date.now()>60000)token=t}catch(e){}
+
+  function mostrarLogin(texto){
+    box.hidden=false;
+    if(texto) msg.textContent=texto;
+  }
+
+  async function api(acao,extra){
+    let r;
     try{
-      await fs.collection("usuarios").doc(u.uid).set({name:(u.displayName||u.email||"").split(" ")[0],email:u.email},{merge:true});
-      box.hidden=true;pronto();
-    }catch(e){
-      box.hidden=false;msg.textContent="O e-mail "+u.email+" ainda não tem acesso. Peça para ser incluído e tente de novo.";
-      btn.textContent="Entrar com outra conta";await auth.signOut();
+      const resp=await fetch(API,{method:"POST",body:JSON.stringify({acao,token,...extra})});
+      r=await resp.json();
+    }catch(e){const err=new Error("Não consegui falar com o Google. Confira a internet.");err.code="unavailable";throw err}
+    if(r.erro){
+      const err=new Error(r.erro);err.code=r.codigo||"erro";
+      if(r.codigo==="entrar"){token=null;try{localStorage.removeItem(CHAVE)}catch(e){};pedirLogin()}
+      if(r.codigo==="sem-acesso") sair(r.erro);
+      throw err;
     }
-  });
-  btn.onclick=()=>{const p=new firebase.auth.GoogleAuthProvider();p.setCustomParameters({prompt:"select_account"});auth.signInWithPopup(p).catch(()=>auth.signInWithRedirect(p))};
-  document.getElementById("sair").onclick=()=>{if(confirm("Sair da conta?"))auth.signOut().then(()=>location.reload())};
+    return r;
+  }
+
+  function avisar(){ouvintes.forEach(fn=>{try{fn()}catch(e){console.error(e)}})}
+
+  function receber(r){
+    eu=r.eu;
+    if(r.mudou){docs={lancamentos:{},config:{},...r.docs};nomes=r.nomes||{};versao=r.versao;avisar()}
+  }
+
+  async function sincronizar(){
+    if(!token||!carregado||fila.length||enviando) return;
+    const antes=mudancasLocais;
+    try{const r=await api("dados",{versao});if(antes===mudancasLocais&&!fila.length)receber(r)}catch(e){}
+  }
+
+  // ---- gravação: aplica na hora na tela e manda para a planilha em seguida
+  let fila=[],enviando=false,tEnvio=null,espera=2000;
+  function aplicar(o){
+    const c=docs[o.col]||(docs[o.col]={});
+    if(o.op==="delete") delete c[o.id];
+    else if(o.op==="set") c[o.id]={...o.data};
+    else c[o.id]={...(c[o.id]||{}),...o.data};
+  }
+  function escrever(o){
+    o={...o,data:o.data?JSON.parse(JSON.stringify(o.data)):undefined};
+    aplicar(o);mudancasLocais++;fila.push(o);avisar();
+    clearTimeout(tEnvio);tEnvio=setTimeout(enviar,300);
+    return Promise.resolve();
+  }
+  async function enviar(){
+    if(enviando||!fila.length) return;
+    if(!token){pedirLogin();return}
+    enviando=true;const lote=fila.slice(0,300);
+    try{
+      await api("gravar",{ops:lote});
+      fila.splice(0,lote.length);espera=2000;versao=null;
+    }catch(e){
+      if(e.code==="unavailable"){aviso("Sem conexão. Vou tentar salvar de novo.");setTimeout(enviar,espera);espera=Math.min(espera*2,30000)}
+      else if(e.code!=="entrar"){fila=[];versao=null;aviso("Não foi possível salvar: "+e.message)}
+    }finally{
+      enviando=false;
+      if(fila.length&&token) setTimeout(enviar,300);
+      else if(!fila.length) sincronizar();
+    }
+  }
+  window.addEventListener("beforeunload",e=>{if(fila.length||enviando){e.preventDefault();e.returnValue=""}});
+
+  // ---- imitação do Firestore
+  const novoId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+  const instantaneo=(id,d)=>({id,exists:!!d,data:()=>d?JSON.parse(JSON.stringify(d)):undefined});
+  function ref(col,id){
+    const snap=()=>instantaneo(id,(docs[col]||{})[id]);
+    return{id,
+      get:async()=>{await ok;return snap()},
+      set:(d,o)=>escrever({op:o&&o.merge?"update":"set",col,id,data:d}),
+      update:d=>escrever({op:"update",col,id,data:d}),
+      delete:()=>escrever({op:"delete",col,id}),
+      onSnapshot:fn=>{const o=()=>fn(snap());ouvintes.add(o);if(carregado)o();return()=>ouvintes.delete(o)}
+    };
+  }
+  function consulta(col,filtros){
+    const passa=d=>filtros.every(([f,op,v])=>{const x=d[f];return op==="=="?x===v:op===">="?x>=v:op==="<="?x<=v:op===">"?x>v:op==="<"?x<v:op==="!="?x!==v:false});
+    const snap=()=>({docs:Object.entries(docs[col]||{}).filter(([,d])=>passa(d)).map(([id,d])=>instantaneo(id,d))});
+    return{
+      where:(f,op,v)=>consulta(col,[...filtros,[f,op,v]]),
+      get:async()=>{await ok;return snap()},
+      onSnapshot:fn=>{const o=()=>fn(snap());ouvintes.add(o);if(carregado)o();return()=>ouvintes.delete(o)},
+      doc:id=>ref(col,id||novoId()),
+      add:async d=>{const id=novoId();await escrever({op:"set",col,id,data:d});return ref(col,id)}
+    };
+  }
+  const db={collection:c=>consulta(c,[]),doc:p=>{const [c,id]=p.split("/");return ref(c,id)}};
+  const user={
+    me:async()=>({id:eu&&eu.id}),
+    can:async()=>true,
+    profiles:async ids=>Object.fromEntries(ids.map(id=>[id,{name:nomes[id]||null}]))
+  };
+  window.claude={use:n=>ok.then(()=>n==="db"?db:n==="user"?user:null)};
+
+  // ---- login com o Google
+  async function entrar(credencial){
+    token=credencial;
+    try{localStorage.setItem(CHAVE,credencial)}catch(e){}
+    msg.textContent="Entrando…";
+    try{
+      const r=await api("dados",carregado?{versao}:{});
+      if(!carregado){receber(r);carregado=true;pronto()}else{eu=r.eu;if(r.mudou&&!fila.length)receber(r)}
+      box.hidden=true;
+      agendarRenovacao();
+      if(fila.length) enviar();
+    }catch(e){
+      if(e.code==="unavailable") mostrarLogin(e.message);
+      else if(e.code!=="sem-acesso"&&e.code!=="entrar") mostrarLogin(e.message);
+    }
+  }
+  function pedirLogin(){
+    mostrarLogin(carregado?"Sua entrada expirou. Entre de novo para continuar salvando.":"Entre com sua conta Google para ver e lançar as contas da casa.");
+    if(window.google&&google.accounts) google.accounts.id.prompt();
+  }
+  let tRenova=null;
+  function agendarRenovacao(){
+    clearTimeout(tRenova);
+    const falta=validade(token)-Date.now()-5*60000;
+    tRenova=setTimeout(()=>{if(window.google&&google.accounts)google.accounts.id.prompt()},Math.max(falta,10000));
+  }
+  function sair(texto){
+    token=null;
+    try{localStorage.removeItem(CHAVE)}catch(e){}
+    if(window.google&&google.accounts) google.accounts.id.disableAutoSelect();
+    mostrarLogin(texto||"Entre com sua conta Google para ver e lançar as contas da casa.");
+  }
+  window.iniciarGoogle=function(){
+    if(!API||!CLIENT_ID||window._googleIniciado) return;
+    window._googleIniciado=true;
+    google.accounts.id.initialize({client_id:CLIENT_ID,callback:r=>entrar(r.credential),auto_select:true});
+    google.accounts.id.renderButton(el("botaoGoogle"),{theme:"filled_blue",size:"large",shape:"pill",text:"signin_with",locale:"pt-BR"});
+    if(!token) google.accounts.id.prompt();
+  };
+  el("sair").onclick=()=>{if(confirm("Sair da conta?")){sair();location.reload()}};
+
+  if(!API||!CLIENT_ID){mostrarLogin("O sistema ainda não foi ligado à planilha do Google (falta preencher o config.js).");return}
+  if(token) entrar(token); else mostrarLogin();
+  setInterval(()=>{if(document.visibilityState==="visible")sincronizar()},20000);
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")sincronizar()});
 })();
 </script>
+<script src="https://accounts.google.com/gsi/client" async onload="iniciarGoogle()"></script>
 <script>
 const CATS_D=[
  {id:"moradia",n:"Moradia",e:"🏠",f:1},{id:"contas",n:"Contas da casa",e:"💡",f:1},{id:"mercado",n:"Mercado",e:"🛒"},
