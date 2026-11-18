@@ -7,7 +7,7 @@
 // A planilha não é pública: os e-mails e os valores não aparecem para ninguém de fora.
 
 // Código do cliente do "Fazer login com o Google" (Google Cloud). Não é segredo: pode ficar aqui.
-const CLIENT_ID = "COLE_AQUI.apps.googleusercontent.com";
+const CLIENT_ID = "477830530192-hthgf4gj748nlt78ib7m1mfdhjn9lcg7.apps.googleusercontent.com";
 const COLECOES = ["lancamentos", "config"];
 
 // Rode esta função UMA vez pelo editor (botão "Executar"): ela pede as permissões e cria a planilha de dados.
