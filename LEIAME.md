@@ -5,7 +5,6 @@ Site: https://jonathantecnologia1.github.io/financas-casa/
 Arquivos:
 - index.html – o sistema
 - config.js – endereços da ponte com o Google (preencher)
-- importar.html – traz os lançamentos que já existem (usar uma vez)
 - apps-script/ – a ponte com a planilha do Google, que é colada em script.google.com
 - dados.json – os lançamentos atuais exportados (fica só no computador, não vai para o GitHub)
 

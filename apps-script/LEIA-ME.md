@@ -52,7 +52,7 @@ Abra a planilha **Finanças da Casa (dados)** no seu Drive, aba **Pessoas**, e c
 
 ## Parte 5: trazer os dados atuais
 
-Abra https://jonathantecnologia1.github.io/financas-casa/importar.html, entre com Google, escolha o `dados.json` e toque em **Importar**. Depois pode apagar o `importar.html`.
+No Apps Script, clique em **+ → Script** e crie um arquivo chamado **importar-dados**. Cole nele o conteúdo de `apps-script/importar-dados.gs` (esse arquivo fica só no computador, não vai para o GitHub). Escolha a função **importarDadosAntigos** e clique em **Executar**. Depois pode apagar esse arquivo do Apps Script.
 
 ## Depois
 
