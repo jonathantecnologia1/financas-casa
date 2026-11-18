@@ -151,6 +151,7 @@ nav a.on span{background:var(--forest);color:var(--forest-ink)}
 .grab{width:40px;height:5px;border-radius:5px;background:var(--line);margin:0 auto 14px}
 .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border-radius:12px;padding:4px;gap:4px}
 .seg button{border:0;border-radius:9px;padding:10px;font-weight:700;background:transparent;color:var(--muted)}
+#seg{grid-template-columns:repeat(3,1fr)}
 .seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .amount{display:flex;align-items:baseline;justify-content:center;gap:6px;margin:18px 0 6px}
 .amount span{font-family:"Bricolage Grotesque",sans-serif;font-size:26px;font-weight:700;color:var(--muted)}
@@ -226,14 +227,15 @@ nav a.on span{background:var(--forest);color:var(--forest-ink)}
   <div class="seg" id="seg">
     <button data-t="despesa">Saiu</button>
     <button data-t="receita">Entrou</button>
+    <button data-t="areceber">Vou receber</button>
   </div>
   <div class="amount"><span>R$</span><input id="fValor" inputmode="decimal" placeholder="0,00" autocomplete="off" aria-label="Valor"></div>
   <div class="field"><label for="fDesc">Descrição</label><input id="fDesc" type="text" list="descs" placeholder="Ex.: conta de luz" maxlength="80" autocomplete="off"><datalist id="descs"></datalist></div>
   <div class="field"><label for="fData" id="fDataLbl">Vencimento</label><input id="fData" type="date"></div>
   <div class="field"><label>Categoria</label><div class="chips" id="fCats"></div></div>
   <div class="opts" id="fOpts">
-    <details class="opt" id="fParcBox"><summary><span>Parcelas</span><em id="sParc">À vista</em></summary><div class="optin">
-      <div class="dj"><span>Total de</span><input id="pNumIn" class="num" type="number" inputmode="numeric" min="1" max="60" value="1" aria-label="Total de parcelas"><span>parcelas</span></div>
+    <details class="opt" id="fParcBox"><summary><span id="pTit">Parcelas</span><em id="sParc">À vista</em></summary><div class="optin">
+      <div class="dj"><span id="pPre">Total de</span><input id="pNumIn" class="num" type="number" inputmode="numeric" min="1" max="60" value="1" aria-label="Total de parcelas"><span id="pUn">parcelas</span></div>
       <div class="dj" id="pIniRow"><span style="color:var(--ink)">Começar a partir de qual parcela?</span><input id="pIniIn" class="num" type="number" inputmode="numeric" min="1" max="60" value="1" aria-label="Parcela inicial"></div>
       <div class="note" id="pInfo">À vista</div>
     </div></details>
@@ -512,11 +514,13 @@ function nome(id){if(!id||id==="?")return "Sem nome";if(id===S.me)return "Você"
 
 function balanco(t){
   let ae=0,as=0,jur=0,des=0;for(const i of (S.anoItens||[])){if(i.tipo==="receita")ae+=i.valor;else{as+=valorEf(i);if(i.pago){const aj=i.ajuste??(i.valorPago!=null?i.valorPago-i.valor:0);if(aj>0)jur+=aj;else des-=aj}}}
+  const prevMes=S.itens.filter(i=>i.tipo==="receita"&&i.previsto).reduce((s,i)=>s+i.valor,0);
   const sm=t.ent-t.sai,sa=ae-as,sv=v=>'<span class="'+(v<0?'neg':'pos')+'">'+(v<0?'−':'')+fmt(Math.abs(v))+'</span>';
   return '<div class="balwrap"><table class="bal"><tr><th>Balanço</th><th>'+esc(mesCurto(S.mes))+'</th><th>'+S.mes.slice(0,4)+'</th></tr>'+
     '<tr><td>Receitas</td><td class="pos">'+fmt(t.ent)+'</td><td class="pos">'+fmt(ae)+'</td></tr>'+
     '<tr><td>Despesas</td><td class="neg">'+fmt(t.sai)+'</td><td class="neg">'+fmt(as)+'</td></tr>'+
     '<tr class="saldo"><td>Saldo</td><td>'+sv(sm)+'</td><td>'+sv(sa)+'</td></tr></table></div>'+
+    (prevMes?'<p class="note" style="margin:8px 4px 0">As receitas de '+esc(mesCurto(S.mes))+' incluem <b class="pos">'+fmt(prevMes)+'</b> ainda a receber.</p>':'')+
     (jur||des?'<p class="note" style="margin:8px 4px 0">Em '+S.mes.slice(0,4)+': '+(jur?'<b class="neg">'+fmt(jur)+'</b> pagos de juros/multa':'')+(jur&&des?' · ':'')+(des?'<b class="pos">'+fmt(des)+'</b> economizados com desconto':'')+'</p>':'');
 }
 function graficoAno(){
@@ -562,6 +566,7 @@ function vInicio(){
   return h;
 }
 
+const tipoReal=t=>t==="despesa"?"despesa":"receita";
 function valorEf(i){
   if(i.tipo!=="despesa")return i.valor;
   if(i.pago)return i.valorPago??i.valor;
@@ -572,6 +577,13 @@ function valorEf(i){
 }
 function valorForm(){return valorEf({tipo:"despesa",valor:parseValor($("fValor").value)||0,desconto:parseValor($("fDescV").value)||0,descontoAte:$("fDescAte").value,juros:parseValor($("fJuros").value)||0,data:$("fData").value})}
 function status(i){
+  if(i.tipo==="receita"){
+    if(!i.previsto)return i.recebidoEm?{k:"paga",t:"Recebido em "+dm(i.recebidoEm)}:null;
+    const [y,m,d]=i.data.split("-").map(Number),t=new Date(),hj=new Date(t.getFullYear(),t.getMonth(),t.getDate()),n=Math.round((new Date(y,m-1,d)-hj)/864e5);
+    if(n<0)return{k:"venc",t:"A receber, atrasado "+(-n)+(n===-1?" dia":" dias")};
+    if(n===0)return{k:"hoje",t:"A receber hoje"};
+    return{k:"aberta",t:"A receber "+pad(d)+"/"+pad(m)};
+  }
   if(i.tipo!=="despesa")return null;
   if(i.pago){const aj=i.ajuste??(i.valorPago!=null?i.valorPago-i.valor:0);return{k:"paga",t:"Paga"+(i.pagoEm?" em "+dm(i.pagoEm):"")+(aj>0?", com "+fmt(aj)+" de juros":aj<0?", com "+fmt(-aj)+" de desconto":"")}}
   const [y,m,d]=i.data.split("-").map(Number),t=new Date(),hj=new Date(t.getFullYear(),t.getMonth(),t.getDate());
@@ -586,9 +598,10 @@ function status(i){
 function linhaItem(i){
   const c=CAT[i.categoria]||{n:"Outros",e:"📦"},st=status(i),meta=[esc(c.n)];
   if(i.tipo==="despesa")meta.push(natureza(i)==="fixa"?"Fixa":"Variável");
-  if(i.parcelas>1)meta.push("parcela "+i.parcela+"/"+i.parcelas);
+  if(i.parcelas>1)meta.push((i.tipo==="receita"?"mês ":"parcela ")+i.parcela+"/"+i.parcelas);
   meta.push(esc(nome(i.by)));
   return '<div class="item'+(i.pago?' paid':'')+'"><button class="main" data-id="'+esc(i.id)+'"><span class="em">'+c.e+'</span><span class="tx"><b>'+esc(i.descricao||c.n)+'</b><small>'+meta.join(" · ")+'</small>'+(st?'<span class="pill '+st.k+'">'+st.t+'</span>':'')+'</span><span class="v '+(i.tipo==="receita"?"pos":"neg")+'">'+(i.tipo==="receita"?"+":"−")+fmt(valorEf(i))+(i.tipo==="despesa"&&valorEf(i)!==i.valor?'<small class="orig">'+fmt(i.valor)+'</small>':'')+'</span></button>'+
+    (i.tipo==="receita"&&(i.previsto||i.recebidoEm)&&S.canWrite?'<button class="pay'+(i.previsto?'':' on')+'" data-pay="'+esc(i.id)+'" aria-label="'+(i.previsto?'Marcar como recebido':'Marcar como a receber')+'">✓</button>':'')+
     (i.tipo==="despesa"&&S.canWrite?'<button class="pay'+(i.pago?' on':'')+'" data-pay="'+esc(i.id)+'" aria-label="'+(i.pago?'Marcar como a pagar':'Marcar como paga')+'">✓</button>':'')+'</div>';
 }
 const iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
@@ -614,6 +627,8 @@ function vPagar(){
     const sub=its.reduce((s,x)=>s+valorEf(x.i),0);acum+=sub;
     out+='<h2'+(g.neg?' class="neg"':'')+'>'+esc(g.t)+'</h2><p class="note" style="margin:-6px 0 10px">'+(g.s?esc(g.s)+'. ':'')+(its.length?'<b>'+fmt(sub)+'</b> em '+its.length+(its.length===1?' fatura':' faturas')+(acum!==sub?'. Somando com as anteriores: <b>'+fmt(acum)+'</b>':''):'Nada para pagar aqui.')+'</p>'+its.map(x=>linhaItem(x.i)).join("");
   }
+  const rec=(S.pagItens||[]).filter(i=>i.tipo==="receita"&&i.previsto&&i.data<=d5).sort((a,b)=>a.data.localeCompare(b.data));
+  if(rec.length){const tr=rec.reduce((s,i)=>s+i.valor,0);out+='<h2 class="pos">A receber</h2><p class="note" style="margin:-6px 0 10px">Até '+dm(d5)+': <b>'+fmt(tr)+'</b> em '+rec.length+(rec.length===1?' valor':' valores')+'. Toque no ✓ quando o dinheiro chegar.</p>'+rec.map(linhaItem).join("")}
   return out;
 }
 function vExtrato(){
@@ -636,20 +651,24 @@ function vOrcamento(){
 
 /* ---------- Formulário ---------- */
 function pintarCats(){
-  const lista=S.tipo==="receita"?CATS_R:CATS_D;
+  const lista=S.tipo==="despesa"?CATS_D:CATS_R;
   if(!lista.some(c=>c.id===S.cat)) S.cat=null;
   $("fCats").innerHTML=lista.map(c=>'<button type="button" data-c="'+c.id+'" class="'+(c.id===S.cat?"on":"")+'">'+c.e+' '+esc(c.n)+'</button>').join("");
   document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",b.dataset.t===S.tipo));
   pintarParc();pintarNat();pintarPago();
 }
-function pintarPago(){const d=S.tipo==="despesa";pintarFDif();$("fOpts").hidden=!d;$("sPago").textContent=S.pago?"Já paga":"A pagar";pintarDJ();$("fDataLbl").textContent=d?"Vencimento":"Data";$("fPagoBox").hidden=!d;$("fDJBox").hidden=!d;$("fPagoVBox").hidden=!(d&&S.pago);document.querySelectorAll("#fPago button").forEach(b=>b.classList.toggle("on",(b.dataset.p==="1")===S.pago))}
+function pintarPago(){const d=S.tipo==="despesa";pintarFDif();$("fOpts").hidden=!(d||S.tipo==="areceber");$("sPago").textContent=S.pago?"Já paga":"A pagar";pintarDJ();$("fDataLbl").textContent=d?"Vencimento":S.tipo==="areceber"?"Dia de receber":"Data";$("fPagoBox").hidden=!d;$("fDJBox").hidden=!d;$("fPagoVBox").hidden=!(d&&S.pago);document.querySelectorAll("#fPago button").forEach(b=>b.classList.toggle("on",(b.dataset.p==="1")===S.pago))}
 function pintarDJ(){const d=parseValor($("fDescV").value),j=parseValor($("fJuros").value),p=[];if(d)p.push("−"+fmt(d)+($("fDescAte").value?" até "+dm($("fDescAte").value):""));if(j)p.push("+"+fmt(j));$("sDJ").textContent=p.length?p.join(" · "):"Nenhum"}
 function pintarNat(){$("sNat").textContent=S.nat==="fixa"?"Fixa":"Variável";$("fNatBox").hidden=S.tipo!=="despesa";document.querySelectorAll("#fNat button").forEach(b=>b.classList.toggle("on",b.dataset.n===S.nat))}
 function pintarParc(){
-  $("fParcBox").hidden=S.tipo!=="despesa"||!!S.editando;
+  const rec=S.tipo==="areceber";
+  $("fParcBox").hidden=S.tipo==="receita"||!!S.editando;
+  $("pTit").textContent=rec?"Repetir todo mês":"Parcelas";$("pPre").textContent=rec?"Por":"Total de";$("pUn").textContent=rec?"meses":"parcelas";
   S.parc=Math.min(60,Math.max(1,parseInt($("pNumIn").value,10)||1));
   S.parcIni=Math.min(S.parc,Math.max(1,parseInt($("pIniIn").value,10)||1));
-  $("pIniRow").hidden=false;
+  if(rec)S.parcIni=1;
+  $("pIniRow").hidden=rec;
+  if(rec){const v=parseValor($("fValor").value);$("sParc").textContent=S.parc===1?"Só este mês":S.parc+" meses";$("pInfo").textContent=S.parc===1?"Só este mês":(v?"Serão lançados "+S.parc+" meses de "+fmt(v)+", sempre no mesmo dia, a partir da data escolhida.":"Digite o valor de cada mês");return}
   $("sParc").textContent=S.parc===1?"À vista":(S.parcIni>1?"Da "+S.parcIni+"ª à "+S.parc+"ª":S.parc+"×");
   const v=parseValor($("fValor").value),resto=S.parc-S.parcIni+1;
   $("pInfo").textContent=S.parc===1?"À vista":(v?"Serão lançadas "+resto+(resto===1?" parcela":" parcelas")+" de "+fmt(v)+" (da "+S.parcIni+"ª à "+S.parc+"ª), total de "+fmt(v*resto)+". A data escolhida vale para a "+S.parcIni+"ª.":"Digite o valor de cada parcela");
@@ -658,7 +677,7 @@ function abrir(item){
   S.editando=item||null;
   $("hist").classList.remove("open");S.histItem=null;S.catAberta=null;
   $("descs").innerHTML=[...new Set(S.itens.map(x=>x.descricao).filter(Boolean))].map(d=>'<option value="'+esc(d)+'">').join("");
-  S.tipo=item?item.tipo:"despesa"; S.cat=item?item.categoria:null; S.parc=1;S.parcIni=1;$("pNumIn").value=1;$("pIniIn").value=1;document.querySelectorAll(".opt").forEach(d=>d.open=false);
+  S.tipo=item?(item.tipo==="receita"&&item.previsto?"areceber":item.tipo):"despesa"; S.cat=item?item.categoria:null; S.parc=1;S.parcIni=1;$("pNumIn").value=1;$("pIniIn").value=1;document.querySelectorAll(".opt").forEach(d=>d.open=false);
   S.nat=item?natureza(item):"variavel"; S.natManual=!!(item&&item.natureza); S.pago=item?!!item.pago:false;
   $("fValor").value=item?centsToInput(item.valor):"";
   $("fDescV").value=item&&item.desconto?centsToInput(item.desconto):"";$("fDescAte").value=(item&&item.descontoAte)||"";
@@ -668,8 +687,8 @@ function abrir(item){
   $("fData").value=item?item.data:(h.slice(0,7)===S.mes?h:S.mes+"-01");
   $("fErr").textContent="";
   $("fExcluir").hidden=!(item&&S.canWrite); $("fExcluir").dataset.confirm="";
-  $("fExcluir").textContent=item&&item.parcelas>1?"Excluir só esta parcela":"Excluir lançamento";
-  $("fExcluirTodas").hidden=!(item&&item.grupo&&S.canWrite); $("fExcluirTodas").dataset.confirm=""; $("fExcluirTodas").textContent="Excluir todas as "+((item&&item.parcelas)||"")+" parcelas";
+  $("fExcluir").textContent=item&&item.parcelas>1?(item.tipo==="receita"?"Excluir só este mês":"Excluir só esta parcela"):"Excluir lançamento";
+  $("fExcluirTodas").hidden=!(item&&item.grupo&&S.canWrite); $("fExcluirTodas").dataset.confirm=""; $("fExcluirTodas").textContent=item&&item.tipo==="receita"?"Excluir todos os "+(item.parcelas||"")+" meses":"Excluir todas as "+((item&&item.parcelas)||"")+" parcelas";
   $("fSalvar").hidden=!S.canWrite;
   S.serie=[];S.serieTodos=false;$("fSerieBox").hidden=true;
   if(item&&S.canWrite) proximosDaSerie(item).then(l=>{if(S.editando!==item||!l.length)return;S.serie=l;$("fSerieTodos").textContent="Este e os próximos "+l.length;$("fSerieBox").hidden=false;pintarSerie()}).catch(()=>{});
@@ -708,7 +727,7 @@ async function salvar(){
   let valorPagoIn=null;
   if(isD&&S.pago){valorPagoIn=parseValor($("fPagoV").value);if(!valorPagoIn){$("fPagoBox").open=true;return $("fErr").textContent="Informe quanto foi pago."}}
   const e=S.editando;
-  const doc={...(S.tipo==="despesa"?{natureza:S.nat,pago:S.pago,desconto:desc,descontoAte:desc?descAte:null,juros:jur,valorPago:valorPagoIn,ajuste:valorPagoIn?valorPagoIn-valor:null,pagoEm:valorPagoIn?((e&&e.pagoEm)||hoje()):null}:{}),tipo:S.tipo,valor,descricao:$("fDesc").value.trim().slice(0,80),categoria:S.cat,data,mes:data.slice(0,7),by:e?(e.by??null):S.me,criadoEm:e?(e.criadoEm||Date.now()):Date.now()};
+  const doc={...(S.tipo==="despesa"?{natureza:S.nat,pago:S.pago,desconto:desc,descontoAte:desc?descAte:null,juros:jur,valorPago:valorPagoIn,ajuste:valorPagoIn?valorPagoIn-valor:null,pagoEm:valorPagoIn?((e&&e.pagoEm)||hoje()):null}:{}),...(S.tipo==="despesa"?{}:{previsto:S.tipo==="areceber",recebidoEm:S.tipo==="receita"&&e&&(e.previsto||e.recebidoEm)?(e.recebidoEm||hoje()):null}),tipo:tipoReal(S.tipo),valor,descricao:$("fDesc").value.trim().slice(0,80),categoria:S.cat,data,mes:data.slice(0,7),by:e?(e.by??null):S.me,criadoEm:e?(e.criadoEm||Date.now()):Date.now()};
   $("fSalvar").disabled=true;
   try{
     if(e){
@@ -718,13 +737,13 @@ async function salvar(){
         for(const f of S.serie){
           k++;$("fSalvar").textContent="Atualizando "+k+" de "+n+"…";
           const off=mesesEntre(e.data,f.data),dt=addMes(data,off);
-          const upd={tipo:S.tipo,data:dt,mes:dt.slice(0,7),valor,descricao:doc.descricao,categoria:doc.categoria};
+          const upd={tipo:tipoReal(S.tipo),data:dt,mes:dt.slice(0,7),valor,descricao:doc.descricao,categoria:doc.categoria};
           if(isD){Object.assign(upd,{natureza:doc.natureza,desconto:desc,juros:jur,descontoAte:desc?addMes(descAte,off):null});if(f.pago&&f.valorPago!=null)upd.ajuste=f.valorPago-valor}
           await grava(()=>db.collection("lancamentos").doc(f.id).update(upd));
         }
       }
     }
-    else if(S.tipo==="despesa"&&S.parc>1){
+    else if((S.tipo==="despesa"||S.tipo==="areceber")&&S.parc>1){
       const n=S.parc,grupo="g"+Date.now()+Math.random().toString(36).slice(2,7);
       const ini=S.parcIni||1;
       for(let k=0;k<n-ini+1;k++){
@@ -775,7 +794,7 @@ function pintarCat(){
   if(!its.length) h+='<p class="empty">Nada lançado aqui no mês.</p>';
   else h+=its.map(i=>{
     const st=status(i),[,m,d]=i.data.split("-"),meta=['Vence '+d+'/'+m,nat?esc((CAT[i.categoria]||{n:"Outros"}).n):(natureza(i)==="fixa"?"Fixa":"Variável")];
-    if(i.parcelas>1)meta.push("parcela "+i.parcela+"/"+i.parcelas);
+    if(i.parcelas>1)meta.push((i.tipo==="receita"?"mês ":"parcela ")+i.parcela+"/"+i.parcelas);
     meta.push(esc(nome(i.by)));
     return '<div class="crow"><div class="tx"><b>'+esc(nomeItem(i))+'</b><small>'+meta.join(" · ")+'</small>'+(st?'<span class="pill '+st.k+'">'+st.t+'</span>':'')+'</div><b class="neg">'+fmt(valorEf(i))+(valorEf(i)!==i.valor?'<small class="orig">'+fmt(i.valor)+'</small>':'')+'</b>'+(S.canWrite?'<button class="pen" data-edit="'+esc(i.id)+'" aria-label="Editar '+esc(nomeItem(i))+'">✏️</button>':'')+'</div>';
   }).join("");
@@ -824,6 +843,11 @@ async function confirmarPag(){
 function pintarFDif(){$("fPagoDif").innerHTML=difTxt(parseValor($("fPagoV").value),parseValor($("fValor").value))}
 async function togglePago(id){
   const i=S.itens.find(x=>x.id===id)||(S.pagItens||[]).find(x=>x.id===id);if(!i)return;
+  if(i.tipo==="receita"){
+    try{await grava(()=>db.collection("lancamentos").doc(id).update(i.previsto?{previsto:false,recebidoEm:hoje()}:{previsto:true,recebidoEm:null}));toast(i.previsto?"Marcado como recebido":"Marcado como a receber")}
+    catch(err){toast(erroEscrita(err))}
+    return;
+  }
   if(!i.pago){abrirPagar(i);return}
   try{await grava(()=>db.collection("lancamentos").doc(id).update({pago:false,valorPago:null,pagoEm:null,ajuste:null}));toast("Marcada como a pagar")}
   catch(err){toast(erroEscrita(err))}
