@@ -101,6 +101,9 @@ h2{font-family:"Bricolage Grotesque",sans-serif;font-size:19px;font-weight:700;l
 .cat .val small{color:var(--muted);font-weight:500}
 .bar{height:8px;border-radius:8px;background:var(--track);margin-top:8px;overflow:hidden}
 .bar i{display:block;height:100%;border-radius:8px;background:var(--forest)}
+.quem .row .nm small{color:var(--muted);font-weight:500}
+.qsub{font-size:13px;font-weight:700;color:var(--muted);margin:14px 0 2px}
+.qsub:first-child{margin-top:2px}
 .bar i.warn{background:var(--sun)} .bar i.over{background:var(--neg)}
 .note{font-size:13px;color:var(--muted);margin-top:4px}
 .note.over{color:var(--neg);font-weight:600}
@@ -158,7 +161,7 @@ nav a.on span{background:var(--forest);color:var(--forest-ink)}
 .amount input{font-family:"Bricolage Grotesque",sans-serif;font-size:46px;font-weight:800;border:0;background:transparent;width:220px;text-align:left;outline:none;letter-spacing:-.03em}
 .field{margin-top:14px}
 .field>label{display:block;font-weight:700;font-size:13px;color:var(--muted);margin-bottom:6px}
-.field input[type=text],.field input[type=date]{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:12px;outline:none}
+.field select,.field input[type=text],.field input[type=date]{color:var(--ink);font:inherit;width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:12px;outline:none}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chips button{border:1px solid transparent;background:var(--chip);border-radius:20px;padding:8px 12px;font-weight:600;font-size:14px}
 .chips button.on{background:var(--forest);color:var(--forest-ink)}
@@ -241,7 +244,8 @@ nav a.on span{background:var(--forest);color:var(--forest-ink)}
     </div></details>
     <details class="opt" id="fPagoBox"><summary><span>Situação</span><em id="sPago">A pagar</em></summary><div class="optin">
       <div class="seg" id="fPago"><button type="button" data-p="0">A pagar</button><button type="button" data-p="1">Já paga</button></div>
-      <div class="field" id="fPagoVBox"><label for="fPagoV">Valor pago</label><div class="money" style="width:170px"><span>R$</span><input id="fPagoV" inputmode="decimal"></div><div class="note" id="fPagoDif" style="margin-top:6px;font-weight:600"></div></div>
+      <div class="field" id="fPagoVBox"><label for="fPagoV">Valor pago</label><div class="money" style="width:170px"><span>R$</span><input id="fPagoV" inputmode="decimal"></div><div class="note" id="fPagoDif" style="margin-top:6px;font-weight:600"></div>
+      <label for="fPagoPor" style="margin-top:10px;display:block;font-weight:700;font-size:13px;color:var(--muted);margin-bottom:6px">Quem pagou</label><select id="fPagoPor" style="width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:12px;color:var(--ink);font:inherit"></select></div>
     </div></details>
     <details class="opt" id="fNatBox"><summary><span>Tipo de conta</span><em id="sNat">Variável</em></summary><div class="optin">
       <div class="seg" id="fNat"><button type="button" data-n="fixa">Fixa</button><button type="button" data-n="variavel">Variável</button></div>
@@ -272,6 +276,7 @@ nav a.on span{background:var(--forest);color:var(--forest-ink)}
   <div class="amount"><span>R$</span><input id="payValor" inputmode="decimal" aria-label="Valor pago"></div>
   <p class="note" id="payDif" style="text-align:center;min-height:22px;margin:0 0 4px;font-weight:600"></p>
   <div class="field"><label for="payData">Pago em</label><input id="payData" type="date"></div>
+  <div class="field"><label for="payPor">Quem pagou</label><select id="payPor"></select></div>
   <div class="err" id="payErr"></div>
   <button class="btn" id="payOk">Confirmar pagamento</button>
 </div></div>
@@ -393,7 +398,8 @@ nav a.on span{background:var(--forest);color:var(--forest-ink)}
   const user={
     me:async()=>({id:eu&&eu.id}),
     can:async()=>true,
-    profiles:async ids=>Object.fromEntries(ids.map(id=>[id,{name:nomes[id]||null}]))
+    profiles:async ids=>Object.fromEntries(ids.map(id=>[id,{name:nomes[id]||null}])),
+    pessoas:async()=>{const o={...nomes};if(eu&&eu.id&&!o[eu.id])o[eu.id]=eu.nome||eu.id.split("@")[0];return o}
   };
   window.claude={use:n=>ok.then(()=>n==="db"?db:n==="user"?user:null)};
 
@@ -510,6 +516,12 @@ function totais(){
   }
   return {ent,sai,fix,vari,porCat,porPessoa};
 }
+function nomeReal(id){if(!id)return "Sem registro";return (S.pessoas&&S.pessoas[id])||S.nomes[id]||(id===S.me?"Você":"Alguém")}
+function opcoesPagador(sel,atual){
+  const ps={...(S.pessoas||{})};if(S.me&&!ps[S.me])ps[S.me]="Você";if(atual&&!ps[atual])ps[atual]=nomeReal(atual);
+  sel.innerHTML=Object.entries(ps).sort((a,b)=>a[1].localeCompare(b[1])).map(([id,n])=>'<option value="'+esc(id)+'">'+esc(n)+(id===S.me?' (você)':'')+'</option>').join("");
+  sel.value=atual||S.me||"";
+}
 function nome(id){if(!id||id==="?")return "Sem nome";if(id===S.me)return "Você";return S.nomes[id]||"Alguém"}
 
 function balanco(t){
@@ -559,6 +571,7 @@ function vInicio(){
       return '<div class="cat tap" data-catv="'+c.id+'" role="button" tabindex="0"><div class="row"><span class="nm">'+c.e+' '+esc(c.n)+' <span class="chev">›</span></span><span class="val">'+fmt(g)+(l?' <small>de '+fmt(l)+'</small>':'')+'</span></div><div class="bar"><i class="'+cls+'" style="width:'+pct.toFixed(1)+'%"></i></div>'+note+'</div>';
     }).join("")+'</div>';
   }
+  h+=quemPagou();
   const pessoas=Object.entries(t.porPessoa);
   if(pessoas.length){
     h+='<h2>Quem lançou</h2><div class="card">'+pessoas.map(([id,p])=>'<div class="cat"><div class="row"><span class="nm">'+esc(nome(id))+'</span><span class="val"><span class="pos">+'+fmt(p.ent)+'</span>  <span class="neg">−'+fmt(p.sai)+'</span></span></div></div>').join("")+'</div>';
@@ -566,6 +579,23 @@ function vInicio(){
   return h;
 }
 
+function somaPagadores(lista){
+  const por={};let semReg=0;
+  for(const i of lista){if(i.tipo!=="despesa"||!i.pago)continue;const v=i.valorPago??i.valor;if(!i.pagoPor){semReg++;continue}const n=nomeReal(i.pagoPor);por[n]=(por[n]||0)+v}
+  return {linhas:Object.entries(por).sort((a,b)=>b[1]-a[1]),semReg};
+}
+function barrasPagadores(titulo,{linhas}){
+  const tot=linhas.reduce((s,x)=>s+x[1],0),max=Math.max(...linhas.map(x=>x[1]),1);
+  let h='<div class="qsub">'+esc(titulo)+(tot?' · '+fmt(tot)+' pagos':'')+'</div>';
+  if(!linhas.length)return h+'<p class="note" style="margin:4px 0 6px">Nenhuma conta paga com registro de quem pagou.</p>';
+  return h+linhas.map(([n,v],k)=>'<div class="cat" title="'+esc(n)+': '+fmt(v)+' ('+Math.round(v/tot*100)+'% do total pago)"><div class="row"><span class="nm">'+(k===0&&linhas.length>1?'🏆 ':'')+esc(n)+'</span><span class="val">'+fmt(v)+' <small>'+Math.round(v/tot*100)+'%</small></span></div><div class="bar"><i style="width:'+(v/max*100).toFixed(1)+'%"></i></div></div>').join("");
+}
+function quemPagou(){
+  const mes=somaPagadores(S.itens),ano=somaPagadores(S.anoItens||[]);
+  if(!mes.linhas.length&&!ano.linhas.length)return "";
+  return '<h2>Quem pagou</h2><div class="card quem">'+barrasPagadores("Em "+mesCurto(S.mes),mes)+barrasPagadores("Em "+S.mes.slice(0,4),ano)+
+    (ano.semReg?'<p class="note" style="margin:10px 0 0">'+ano.semReg+(ano.semReg===1?' conta paga':' contas pagas')+' em '+S.mes.slice(0,4)+' sem registro de quem pagou (de antes desta função) não entram aqui.</p>':'')+'</div>';
+}
 const tipoReal=t=>t==="despesa"?"despesa":"receita";
 function valorEf(i){
   if(i.tipo!=="despesa")return i.valor;
@@ -585,7 +615,7 @@ function status(i){
     return{k:"aberta",t:"A receber "+pad(d)+"/"+pad(m)};
   }
   if(i.tipo!=="despesa")return null;
-  if(i.pago){const aj=i.ajuste??(i.valorPago!=null?i.valorPago-i.valor:0);return{k:"paga",t:"Paga"+(i.pagoEm?" em "+dm(i.pagoEm):"")+(aj>0?", com "+fmt(aj)+" de juros":aj<0?", com "+fmt(-aj)+" de desconto":"")}}
+  if(i.pago){const aj=i.ajuste??(i.valorPago!=null?i.valorPago-i.valor:0);return{k:"paga",t:"Paga"+(i.pagoEm?" em "+dm(i.pagoEm):"")+(i.pagoPor?" por "+nomeReal(i.pagoPor):"")+(aj>0?", com "+fmt(aj)+" de juros":aj<0?", com "+fmt(-aj)+" de desconto":"")}}
   const [y,m,d]=i.data.split("-").map(Number),t=new Date(),hj=new Date(t.getFullYear(),t.getMonth(),t.getDate());
   const n=Math.round((new Date(y,m-1,d)-hj)/864e5);
   if(n<0)return{k:"venc",t:"Venceu há "+(-n)+(n===-1?" dia":" dias")+(i.juros?", com juros":"")};
@@ -683,6 +713,7 @@ function abrir(item){
   $("fDescV").value=item&&item.desconto?centsToInput(item.desconto):"";$("fDescAte").value=(item&&item.descontoAte)||"";
   $("fJuros").value=item&&item.juros?centsToInput(item.juros):"";$("fPagoV").value=item&&item.pago?centsToInput(item.valorPago??item.valor):"";
   $("fDesc").value=item?item.descricao||"":"";
+  opcoesPagador($("fPagoPor"),item&&item.pagoPor||S.me);
   const h=hoje();
   $("fData").value=item?item.data:(h.slice(0,7)===S.mes?h:S.mes+"-01");
   $("fErr").textContent="";
@@ -727,7 +758,7 @@ async function salvar(){
   let valorPagoIn=null;
   if(isD&&S.pago){valorPagoIn=parseValor($("fPagoV").value);if(!valorPagoIn){$("fPagoBox").open=true;return $("fErr").textContent="Informe quanto foi pago."}}
   const e=S.editando;
-  const doc={...(S.tipo==="despesa"?{natureza:S.nat,pago:S.pago,desconto:desc,descontoAte:desc?descAte:null,juros:jur,valorPago:valorPagoIn,ajuste:valorPagoIn?valorPagoIn-valor:null,pagoEm:valorPagoIn?((e&&e.pagoEm)||hoje()):null}:{}),...(S.tipo==="despesa"?{}:{previsto:S.tipo==="areceber",recebidoEm:S.tipo==="receita"&&e&&(e.previsto||e.recebidoEm)?(e.recebidoEm||hoje()):null}),tipo:tipoReal(S.tipo),valor,descricao:$("fDesc").value.trim().slice(0,80),categoria:S.cat,data,mes:data.slice(0,7),by:e?(e.by??null):S.me,criadoEm:e?(e.criadoEm||Date.now()):Date.now()};
+  const doc={...(S.tipo==="despesa"?{natureza:S.nat,pago:S.pago,desconto:desc,descontoAte:desc?descAte:null,juros:jur,valorPago:valorPagoIn,ajuste:valorPagoIn?valorPagoIn-valor:null,pagoEm:valorPagoIn?((e&&e.pagoEm)||hoje()):null,pagoPor:valorPagoIn?($("fPagoPor").value||S.me):null}:{}),...(S.tipo==="despesa"?{}:{previsto:S.tipo==="areceber",recebidoEm:S.tipo==="receita"&&e&&(e.previsto||e.recebidoEm)?(e.recebidoEm||hoje()):null}),tipo:tipoReal(S.tipo),valor,descricao:$("fDesc").value.trim().slice(0,80),categoria:S.cat,data,mes:data.slice(0,7),by:e?(e.by??null):S.me,criadoEm:e?(e.criadoEm||Date.now()):Date.now()};
   $("fSalvar").disabled=true;
   try{
     if(e){
@@ -748,7 +779,7 @@ async function salvar(){
       const ini=S.parcIni||1;
       for(let k=0;k<n-ini+1;k++){
         const dt=addMes(data,k);
-        const pid=grupo+"_"+(ini+k),pdoc={...doc,valor,data:dt,mes:dt.slice(0,7),parcela:ini+k,parcelas:n,grupo,pago:k===0?!!doc.pago:false,valorPago:k===0?(doc.valorPago??null):null,ajuste:k===0?doc.ajuste:null,pagoEm:k===0?doc.pagoEm:null,...(doc.descontoAte?{descontoAte:addMes(doc.descontoAte,k)}:{}),criadoEm:doc.criadoEm+k};
+        const pid=grupo+"_"+(ini+k),pdoc={...doc,valor,data:dt,mes:dt.slice(0,7),parcela:ini+k,parcelas:n,grupo,pago:k===0?!!doc.pago:false,valorPago:k===0?(doc.valorPago??null):null,ajuste:k===0?doc.ajuste:null,pagoEm:k===0?doc.pagoEm:null,pagoPor:k===0?(doc.pagoPor??null):null,...(doc.descontoAte?{descontoAte:addMes(doc.descontoAte,k)}:{}),criadoEm:doc.criadoEm+k};
         await grava(()=>db.collection("lancamentos").doc(pid).set(pdoc));
         $("fSalvar").textContent="Salvando parcela "+(ini+k)+" de "+n+"…";
         if(n>6) await dorme(150);
@@ -828,6 +859,7 @@ function abrirPagar(i){
   $("payNome").textContent=nomeItem(i);
   $("payInfo").textContent="Valor da fatura: "+fmt(i.valor)+(valorEf(i)!==i.valor?". Valor de hoje: "+fmt(valorEf(i)):"")+". Confirme quanto foi pago.";
   $("payValor").value=centsToInput(valorEf(i));$("payData").value=hoje();$("payErr").textContent="";
+  opcoesPagador($("payPor"),S.me);
   pintarPay();
   $("scrim").classList.add("open");$("pay").classList.add("open");
 }
@@ -836,7 +868,7 @@ async function confirmarPag(){
   const i=S.payItem,v=parseValor($("payValor").value);if(!i)return;
   if(!v)return $("payErr").textContent="Informe o valor pago.";
   const b=$("payOk");b.disabled=true;
-  try{await grava(()=>db.collection("lancamentos").doc(i.id).update({pago:true,valorPago:v,pagoEm:$("payData").value||hoje(),ajuste:v-i.valor}));fechar();toast(v>i.valor?"Paga, com "+fmt(v-i.valor)+" de juros":v<i.valor?"Paga, com "+fmt(i.valor-v)+" de desconto":"Marcada como paga")}
+  try{await grava(()=>db.collection("lancamentos").doc(i.id).update({pago:true,valorPago:v,pagoEm:$("payData").value||hoje(),ajuste:v-i.valor,pagoPor:$("payPor").value||S.me}));fechar();toast(v>i.valor?"Paga, com "+fmt(v-i.valor)+" de juros":v<i.valor?"Paga, com "+fmt(i.valor-v)+" de desconto":"Marcada como paga")}
   catch(err){$("payErr").textContent=erroEscrita(err)}
   finally{b.disabled=false}
 }
@@ -849,7 +881,7 @@ async function togglePago(id){
     return;
   }
   if(!i.pago){abrirPagar(i);return}
-  try{await grava(()=>db.collection("lancamentos").doc(id).update({pago:false,valorPago:null,pagoEm:null,ajuste:null}));toast("Marcada como a pagar")}
+  try{await grava(()=>db.collection("lancamentos").doc(id).update({pago:false,valorPago:null,pagoEm:null,ajuste:null,pagoPor:null}));toast("Marcada como a pagar")}
   catch(err){toast(erroEscrita(err))}
 }
 async function salvarOrc(){
@@ -947,6 +979,7 @@ render();
   user=await window.claude.use("user");
   if(user){
     try{const me=await user.me();S.me=me.id}catch(e){}
+    try{if(user.pessoas)S.pessoas=await user.pessoas()}catch(e){}
     try{const cw=await user.can("data.write");S.canWrite=cw!==false}catch(e){}
   }
   const assinarOrc=()=>db.doc("config/orcamento").onSnapshot(s=>{S.limites=(s.exists&&s.data().limites)||{};render()},err=>{if(err&&(err.code==="resource-exhausted"||err.code==="unavailable"))setTimeout(assinarOrc,4000)});
