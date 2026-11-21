@@ -162,6 +162,8 @@ nav a.on span{background:var(--forest);color:var(--forest-ink)}
 .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border-radius:12px;padding:4px;gap:4px}
 .seg button{border:0;border-radius:9px;padding:10px;font-weight:700;background:transparent;color:var(--muted)}
 #seg{grid-template-columns:repeat(3,1fr)}
+.seg.graf{grid-template-columns:repeat(3,1fr);margin:0 0 10px;background:var(--chip)}
+.seg.graf button{padding:8px 4px;font-size:12.5px;line-height:1.2}
 .seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .amount{display:flex;align-items:baseline;justify-content:center;gap:6px;margin:18px 0 6px}
 .amount span{font-family:"Bricolage Grotesque",sans-serif;font-size:26px;font-weight:700;color:var(--muted)}
@@ -490,7 +492,7 @@ const centsToInput=c=>c?(c/100).toFixed(2).replace(".",","):"";
 const dorme=ms=>new Promise(r=>setTimeout(r,ms));
 async function grava(fn){let espera=700;for(let t=0;;t++){try{return await fn()}catch(e){if(e&&(e.code==="resource-exhausted"||e.code==="unavailable")&&t<7){await dorme(espera+Math.random()*400);espera=Math.min(espera*2,8000);continue}throw e}}}
 function addMes(data,n){const [y,m,d]=data.split("-").map(Number);const last=new Date(y,m+n,0).getDate();const dt=new Date(y,m-1+n,Math.min(d,last));return dt.getFullYear()+"-"+pad(dt.getMonth()+1)+"-"+pad(dt.getDate())}
-const S={parc:1,mes:ym(new Date()),itens:[],limites:{},ready:false,erro:"",semDb:false,me:null,canWrite:true,nomes:{},tipo:"despesa",cat:null,editando:null};
+const S={graf:(()=>{try{return localStorage.getItem("financas_graf")||"es"}catch(e){return "es"}})(),parc:1,mes:ym(new Date()),itens:[],limites:{},ready:false,erro:"",semDb:false,me:null,canWrite:true,nomes:{},tipo:"despesa",cat:null,editando:null};
 let db=null,user=null,unsub=null,loadTimer=null;
 const $=id=>document.getElementById(id);
 
@@ -574,26 +576,49 @@ function comparaAA(){
     bloco("Acumulado","Jan–"+ini[m]+"/"+ano,"Jan–"+ini[m]+"/"+aac,soma(at.ent,m),soma(ant.ent,m),soma(at.sai,m),soma(ant.sai,m));
 }
 function graficoAno(){
-  const ano=S.mes.slice(0,4),{ent,sai}=somaMeses(S.anoItens),ant=somaMeses(S.aaItens),temAA=ant.ent.some(Boolean)||ant.sai.some(Boolean);
-  const max=Math.max(...ent,...sai,...(temAA?[...ant.ent,...ant.sai]:[]),1),H=118,top=8,sel=Number(S.mes.slice(5,7))-1;
+  const ano=Number(S.mes.slice(0,4)),aa=ano-1,{ent,sai}=somaMeses(S.anoItens),ant=somaMeses(S.aaItens);
+  const temAA=ant.ent.some(Boolean)||ant.sai.some(Boolean);
+  let modo=S.graf||"es";if(!temAA)modo="es";
+  const sel=Number(S.mes.slice(5,7))-1;
   const nomesM=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-  const marca=(x,v)=>v?'<rect x="'+(x-1)+'" y="'+(top+H-v/max*H-1).toFixed(1)+'" width="11" height="2" rx="1" fill="var(--ink)" opacity=".7"/>':'';
   const ini=["J","F","M","A","M","J","J","A","S","O","N","D"];
+  // séries por modo: [valores, cor, opacidade, rótulo]
+  const series=modo==="es"?[[ent,"var(--pos)",1,"Receitas"],[sai,"var(--neg)",1,"Despesas"]]
+    :modo==="desp"?[[ant.sai,"var(--neg)",.35,String(aa)],[sai,"var(--neg)",1,String(ano)]]
+    :[[ant.ent,"var(--pos)",.35,String(aa)],[ent,"var(--pos)",1,String(ano)]];
+  // escala com valores redondos
+  const bruto=Math.max(...series.flatMap(s=>s[0]),1);
+  const p10=Math.pow(10,Math.floor(Math.log10(bruto/3))),passo=[1,2,2.5,5,10].map(k=>k*p10).find(v=>v*3>=bruto),max=passo*3;
+  const L=36,W=336,top=8,H=136,base=top+H,col=(W-L)/12,bw=Math.min(9,(col-6)/2);
+  const curto=v=>v>=100000?(v/100000).toLocaleString("pt-BR",{maximumFractionDigits:1})+" mil":(v/100).toLocaleString("pt-BR",{maximumFractionDigits:0});
+  const barra=(x,v,cor,op)=>{
+    if(!v)return"";const h=Math.max(2,v/max*H),y=base-h,r=Math.min(3,h/2);
+    return '<path d="M'+x+','+base+'V'+(y+r).toFixed(1)+'Q'+x+','+y.toFixed(1)+' '+(x+r)+','+y.toFixed(1)+'H'+(x+bw-r).toFixed(1)+'Q'+(x+bw).toFixed(1)+','+y.toFixed(1)+' '+(x+bw).toFixed(1)+','+(y+r).toFixed(1)+'V'+base+'Z" fill="'+cor+'"'+(op<1?' opacity="'+op+'"':'')+'/>';
+  };
   let g="";
+  for(let k=0;k<=3;k++){const y=base-k*H/3;g+='<line x1="'+L+'" x2="'+W+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="var(--line)"'+(k?' stroke-dasharray="2 3"':'')+'/><text x="'+(L-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="10.5" fill="var(--muted)">'+(k?curto(k*passo):'0')+'</text>'}
   for(let m=0;m<12;m++){
-    const x=m*28,he=ent[m]/max*H,hs=sai[m]/max*H;
-    const dica=nomesM[m]+" de "+ano+": receitas "+fmt(ent[m])+", despesas "+fmt(sai[m])+(temAA?". Em "+(ano-1)+": receitas "+fmt(ant.ent[m])+", despesas "+fmt(ant.sai[m]):"");
-    g+='<g data-gm="'+(m+1)+'" style="cursor:pointer"><title>'+esc(dica)+'</title><rect x="'+(x+1)+'" y="0" width="26" height="150" rx="7" fill="'+(m===sel?'var(--chip)':'transparent')+'"/>'+
-      (he?'<rect x="'+(x+4)+'" y="'+(top+H-he).toFixed(1)+'" width="9" height="'+he.toFixed(1)+'" rx="3" fill="var(--pos)"/>':'')+
-      (hs?'<rect x="'+(x+15)+'" y="'+(top+H-hs).toFixed(1)+'" width="9" height="'+hs.toFixed(1)+'" rx="3" fill="var(--neg)"/>':'')+
-      (temAA?marca(x+4,ant.ent[m])+marca(x+15,ant.sai[m]):'')+
-      '<text x="'+(x+14)+'" y="143" text-anchor="middle" font-size="11" font-weight="'+(m===sel?800:600)+'" fill="'+(m===sel?'var(--ink)':'var(--muted)')+'">'+ini[m]+'</text></g>';
+    const x=L+m*col,cx=x+col/2,x1=cx-bw-1,x2=cx+1;
+    const dica=nomesM[m]+": "+(modo==="es"?"receitas "+fmt(ent[m])+", despesas "+fmt(sai[m]):series[1][3]+" "+fmt(series[1][0][m])+", "+series[0][3]+" "+fmt(series[0][0][m]));
+    g+='<g data-gm="'+(m+1)+'" style="cursor:pointer"><title>'+esc(dica)+'</title>'+
+      '<rect x="'+(x+1).toFixed(1)+'" y="0" width="'+(col-2).toFixed(1)+'" height="172" rx="7" fill="'+(m===sel?'var(--chip)':'transparent')+'"/>'+
+      barra(x1,series[0][0][m],series[0][1],series[0][2])+barra(x2,series[1][0][m],series[1][1],series[1][2])+
+      '<text x="'+cx.toFixed(1)+'" y="165" text-anchor="middle" font-size="11" font-weight="'+(m===sel?800:600)+'" fill="'+(m===sel?'var(--ink)':'var(--muted)')+'">'+ini[m]+'</text></g>';
   }
-  g='<line x1="0" x2="336" y1="'+(top+H+0.5)+'" y2="'+(top+H+0.5)+'" stroke="var(--line)"/>'+g;
-  return '<h2>M\u00eas a m\u00eas em '+ano+'</h2><div class="card" style="padding:14px 12px 10px">'+
-    '<svg viewBox="0 0 336 150" width="100%" role="img" aria-label="Receitas e despesas por m\u00eas em '+ano+'" style="display:block;font-family:Manrope,system-ui,sans-serif">'+g+'</svg>'+
-    '<div class="note" style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 4px 0"><span><b class="pos">\u25a0</b> Receitas</span><span><b class="neg">\u25a0</b> Despesas</span>'+(temAA?'<span><b style="color:var(--ink);opacity:.7">\u25ac</b> Mesmo mês em '+(ano-1)+'</span>':'')+'<span>Maior valor: '+fmt(max)+'</span></div>'+
-    '<div class="note" style="margin:2px 4px 0">Toque num m\u00eas para abrir o resumo dele.</div></div>';
+  // legenda
+  const quad=(cor,op)=>'<b style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+cor+';opacity:'+op+';vertical-align:-1px"></b>';
+  const leg=series.map(s=>'<span>'+quad(s[1],s[2])+' '+esc(s[3])+'</span>').join("");
+  // o mês escolhido, por extenso (no celular não há "passar o mouse")
+  let resumo;
+  if(modo==="es"){const sd=ent[sel]-sai[sel];resumo='<b>'+nomesM[sel]+':</b> entrou '+fmt(ent[sel])+', saiu '+fmt(sai[sel])+', saldo <span class="'+(sd<0?'neg':'pos')+'">'+(sd<0?'−':'')+fmt(Math.abs(sd))+'</span>'}
+  else{const a=series[1][0][sel],b=series[0][0][sel],d=b?Math.round((a-b)/b*100):null,bom=d===null||d===0?null:(d>0)===(modo==="rec");
+    resumo='<b>'+nomesM[sel]+':</b> '+fmt(a)+' em '+ano+' contra '+fmt(b)+' em '+aa+(d===null?'':' <span class="'+(bom===null?'':bom?'pos':'neg')+'">('+(d>0?'+':d<0?'−':'')+Math.abs(d)+'%)</span>')}
+  const abas=temAA?'<div class="seg graf" role="tablist">'+[["es","Entradas e saídas"],["desp","Despesas x "+aa],["rec","Receitas x "+aa]].map(([k,t])=>'<button type="button" data-graf="'+k+'" class="'+(k===modo?'on':'')+'">'+esc(t)+'</button>').join("")+'</div>':'';
+  return '<h2>Mês a mês em '+ano+'</h2>'+abas+'<div class="card" style="padding:14px 12px 12px">'+
+    '<svg viewBox="0 0 '+W+' 172" width="100%" role="img" aria-label="'+esc(modo==="es"?"Receitas e despesas por mês em "+ano:(modo==="desp"?"Despesas":"Receitas")+" por mês, "+ano+" comparado a "+aa)+'" style="display:block;font-family:Manrope,system-ui,sans-serif">'+g+'</svg>'+
+    '<div class="note" style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 4px 0">'+leg+'</div>'+
+    '<p style="margin:10px 4px 0;font-size:14px">'+resumo+'</p>'+
+    '<div class="note" style="margin:4px 4px 0">Toque num mês para ver o resumo dele.</div></div>';
 }
 function vInicio(){
   const t=totais(),saldo=t.ent-t.sai;
@@ -984,6 +1009,8 @@ $("app").onclick=e=>{
   if(it){const i=S.itens.find(x=>x.id===it.dataset.id)||(S.pagItens||[]).find(x=>x.id===it.dataset.id);if(i)abrirHist(i);return}
   const cv=e.target.closest("[data-catv]");
   if(cv){abrirCat(cv.dataset.catv);return}
+  const gf=e.target.closest("[data-graf]");
+  if(gf){S.graf=gf.dataset.graf;try{localStorage.setItem("financas_graf",S.graf)}catch(err){}render();return}
   const gm=e.target.closest("[data-gm]");
   if(gm){S.mes=S.mes.slice(0,4)+"-"+pad(Number(gm.dataset.gm));assinarMes();render();return}
   if(e.target.id==="salvarOrc") salvarOrc();
