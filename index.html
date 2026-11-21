@@ -646,9 +646,12 @@ function vInicio(){
     }).join("")+'</div>';
   }
   h+=quemPagou();
-  const pessoas=Object.entries(t.porPessoa);
+  // junta pelo nome: a mesma pessoa pode entrar com mais de um e-mail
+  const porNome={};
+  for(const [id,p] of Object.entries(t.porPessoa)){const n=nomeReal(id==="?"?null:id),x=porNome[n]??={ent:0,sai:0,eu:false};x.ent+=p.ent;x.sai+=p.sai;if(id===S.me)x.eu=true}
+  const pessoas=Object.entries(porNome).sort((a,b)=>(b[1].ent+b[1].sai)-(a[1].ent+a[1].sai));
   if(pessoas.length){
-    h+='<h2>Quem lançou</h2><div class="card">'+pessoas.map(([id,p])=>'<div class="cat"><div class="row"><span class="nm">'+esc(nome(id))+'</span><span class="val"><span class="pos">+'+fmt(p.ent)+'</span>  <span class="neg">−'+fmt(p.sai)+'</span></span></div></div>').join("")+'</div>';
+    h+='<h2>Quem lançou</h2><div class="card">'+pessoas.map(([n,p])=>'<div class="cat"><div class="row"><span class="nm">'+esc(n)+(p.eu?' <small style="color:var(--muted);font-weight:500">(você)</small>':'')+'</span><span class="val"><span class="pos">+'+fmt(p.ent)+'</span>  <span class="neg">−'+fmt(p.sai)+'</span></span></div></div>').join("")+'</div>';
   }
   return h;
 }
