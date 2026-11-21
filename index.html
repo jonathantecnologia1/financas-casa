@@ -107,6 +107,7 @@ h2{font-family:"Bricolage Grotesque",sans-serif;font-size:19px;font-weight:700;l
 .quem .row .nm small{color:var(--muted);font-weight:500}
 .qsub{font-size:13px;font-weight:700;color:var(--muted);margin:14px 0 2px}
 .qsub:first-child{margin-top:2px}
+.cat .val small.pct{display:inline-block;min-width:34px;text-align:right;color:var(--ink);font-weight:700}
 .bar.aa{height:5px;margin-top:5px}
 .bar.aa i{background:var(--neg)}
 .note.aa{margin-top:4px;font-size:12px}
@@ -602,6 +603,7 @@ function vInicio(){
   if(t.sai){h+='<h2>Contas fixas e variáveis</h2><div class="card">'+[["fixa","📌 Fixas",t.fix],["variavel","🔀 Variáveis",t.vari]].map(([k,n,v])=>'<div class="cat tap" data-catv="nat:'+k+'" role="button" tabindex="0"><div class="row"><span class="nm">'+n+' <span class="chev">›</span></span><span class="val">'+fmt(v)+' <small>'+Math.round(v/t.sai*100)+'%</small></span></div><div class="bar"><i style="width:'+(v/t.sai*100).toFixed(1)+'%'+(k==="variavel"?';background:var(--sun)':'')+'"></i></div></div>').join("")+'</div>'}
   const mesAA=(Number(S.mes.slice(0,4))-1)+S.mes.slice(4),catAA={};
   for(const i of (S.aaItens||[]))if(i.tipo==="despesa"&&i.mes===mesAA)catAA[i.categoria]=(catAA[i.categoria]||0)+valorEf(i);
+  const totAA=Object.values(catAA).reduce((x,y)=>x+y,0),pc=(v,tot)=>tot?Math.round(v/tot*100)+"%":"";
   const temCatAA=Object.keys(catAA).length>0,cap3=m=>{const t=mesCurto(m).slice(0,3);return t[0].toUpperCase()+t.slice(1)+"/"+m.slice(2,4)},rotAA=cap3(mesAA),rotAt=cap3(S.mes);
   const linhas=CATS_D.map(c=>({c,g:t.porCat[c.id]||0,l:S.limites[c.id]||0,a:catAA[c.id]||0})).filter(x=>x.g||x.l||x.a).sort((a,b)=>b.g-a.g||b.a-a.a);
   h+='<h2>Para onde foi o dinheiro</h2>';
@@ -614,8 +616,8 @@ function vInicio(){
       if(l){pct=Math.min(100,g/l*100);if(g>l){cls="over";note='<div class="note over">Passou '+fmt(g-l)+' do orçamento</div>'}else{if(g/l>=.8)cls="warn";note='<div class="note">Restam '+fmt(l-g)+'</div>'}}
       else pct=g/maxG*100;
       const pctA=l?Math.min(100,a/l*100):a/maxG*100;
-      const linhaAA=temCatAA?'<div class="bar aa"><i style="width:'+pctA.toFixed(1)+'%"></i></div><div class="note aa">'+esc(rotAA)+': '+(a?fmt(a):'nada')+(a&&g?' · '+(g>a?'<span class="neg">'+fmt(g-a)+' a mais</span>':g<a?'<span class="pos">'+fmt(a-g)+' a menos</span>':'igual'):'')+'</div>':'';
-      return '<div class="cat tap" data-catv="'+c.id+'" role="button" tabindex="0"><div class="row"><span class="nm">'+c.e+' '+esc(c.n)+' <span class="chev">›</span></span><span class="val">'+fmt(g)+(l?' <small>de '+fmt(l)+'</small>':'')+'</span></div><div class="bar"><i class="'+cls+'" style="width:'+pct.toFixed(1)+'%"></i></div>'+linhaAA+note+'</div>';
+      const linhaAA=temCatAA?'<div class="bar aa"><i style="width:'+pctA.toFixed(1)+'%"></i></div><div class="note aa">'+esc(rotAA)+': '+(a?fmt(a)+' ('+pc(a,totAA)+')':'nada')+(a&&g?' · '+(g>a?'<span class="neg">'+fmt(g-a)+' a mais</span>':g<a?'<span class="pos">'+fmt(a-g)+' a menos</span>':'igual'):'')+'</div>':'';
+      return '<div class="cat tap" data-catv="'+c.id+'" role="button" tabindex="0"><div class="row"><span class="nm">'+c.e+' '+esc(c.n)+' <span class="chev">›</span></span><span class="val">'+fmt(g)+(l?' <small>de '+fmt(l)+'</small>':'')+(t.sai?' <small class="pct">'+pc(g,t.sai)+'</small>':'')+'</span></div><div class="bar"><i class="'+cls+'" style="width:'+pct.toFixed(1)+'%"></i></div>'+linhaAA+note+'</div>';
     }).join("")+'</div>';
   }
   h+=quemPagou();
