@@ -1,3 +1,4 @@
 dados.json
 apps-script/importar-dados.gs
 apps-script/importar-historico.gs
+apps-script/importar-salarios.gs
