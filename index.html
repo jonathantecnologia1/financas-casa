@@ -204,12 +204,14 @@ nav a.on span{background:var(--forest);color:var(--forest-ink)}
 #login h1{font-family:"Bricolage Grotesque",sans-serif;font-size:34px;margin:0;letter-spacing:-.02em}
 #login p{color:var(--muted);max-width:320px;margin:0}
 #login .btn{max-width:320px}
-.brand{background:none;border:0;padding:0;cursor:pointer}
+.esq{display:flex;align-items:center;gap:8px}
+.sairbtn{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:999px;padding:5px 11px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+@media (max-width:380px){header{padding-left:14px;padding-right:14px}.month span{min-width:112px;font-size:15px}}
 </style>
 </head>
 <body>
 <header><div class="top">
-  <button class="brand" id="sair" title="Sair da conta">Casa</button>
+  <div class="esq"><span class="brand">Casa</span><button class="sairbtn" id="sair" title="Sair da conta">Sair</button></div>
   <div class="month">
     <button id="prev" aria-label="Mês anterior">‹</button>
     <span id="mesLabel"></span>
@@ -445,7 +447,7 @@ nav a.on span{background:var(--forest);color:var(--forest-ink)}
     google.accounts.id.renderButton(el("botaoGoogle"),{theme:"filled_blue",size:"large",shape:"pill",text:"signin_with",locale:"pt-BR"});
     if(!token) google.accounts.id.prompt();
   };
-  el("sair").onclick=()=>{if(confirm("Sair da conta?")){sair();location.reload()}};
+  el("sair").onclick=()=>{if(confirm("Sair da conta"+(eu&&eu.id?" "+eu.id:"")+"?")){sair();location.reload()}};
 
   if(!API||!CLIENT_ID){mostrarLogin("O sistema ainda não foi ligado à planilha do Google (falta preencher o config.js).");return}
   if(token) entrar(token); else mostrarLogin();
@@ -544,6 +546,7 @@ function somaMeses(lista){
   return {ent,sai};
 }
 function comparaAA(){
+  const fc=v=>(v/100).toLocaleString("pt-BR",{maximumFractionDigits:0});
   const aa=Number(S.mes.slice(0,4))-1,m=Number(S.mes.slice(5,7))-1;
   const at=somaMeses(S.anoItens),ant=somaMeses(S.aaItens);
   if(!ant.ent.some(Boolean)&&!ant.sai.some(Boolean))return '<h2>Comparado a '+aa+'</h2><div class="card"><p class="empty">Ainda não há lançamentos de '+aa+' para comparar.</p></div>';
@@ -554,15 +557,15 @@ function comparaAA(){
     const bom=d===0?null:(d>0)===bomSubir;
     return '<td class="'+(bom===null?'':bom?'pos':'neg')+'">'+(d>0?'+':d<0?'−':'')+Math.abs(d)+'%</td>';
   };
-  const dif=(novo,velho)=>{const d=novo-velho;return '<td class="'+(d>0?'pos':d<0?'neg':'')+'">'+(d>0?'+':d<0?'−':'')+fmt(Math.abs(d))+'</td>'};
-  const sv=v=>'<span class="'+(v<0?'neg':'pos')+'">'+(v<0?'−':'')+fmt(Math.abs(v))+'</span>';
+  const dif=(novo,velho)=>{const d=novo-velho;return '<td class="'+(d>0?'pos':d<0?'neg':'')+'">'+(d>0?'+':d<0?'−':'')+fc(Math.abs(d))+'</td>'};
+  const sv=v=>'<span class="'+(v<0?'neg':'pos')+'">'+(v<0?'−':'')+fc(Math.abs(v))+'</span>';
   const bloco=(titulo,c1,c2,e1,e2,s1,s2)=>'<div class="balwrap" style="margin-top:10px"><table class="bal cmp"><tr><th>'+esc(titulo)+'</th><th>'+esc(c1)+'</th><th>'+esc(c2)+'</th><th>Dif.</th></tr>'+
-    '<tr><td>Receitas</td><td>'+fmt(e1)+'</td><td>'+fmt(e2)+'</td>'+pct(e1,e2,true)+'</tr>'+
-    '<tr><td>Despesas</td><td>'+fmt(s1)+'</td><td>'+fmt(s2)+'</td>'+pct(s1,s2,false)+'</tr>'+
+    '<tr><td>Receitas</td><td>'+fc(e1)+'</td><td>'+fc(e2)+'</td>'+pct(e1,e2,true)+'</tr>'+
+    '<tr><td>Despesas</td><td>'+fc(s1)+'</td><td>'+fc(s2)+'</td>'+pct(s1,s2,false)+'</tr>'+
     '<tr class="saldo"><td>Saldo</td><td>'+sv(e1-s1)+'</td><td>'+sv(e2-s2)+'</td>'+dif(e1-s1,e2-s2)+'</tr></table></div>';
   const ano=S.mes.slice(2,4),aac=String(aa).slice(2);
   const ini=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
-  return '<h2>Comparado a '+aa+'</h2><p class="note" style="margin:-6px 0 0">O mesmo período do ano passado. Na diferença, verde é melhor e vermelho é pior.</p>'+
+  return '<h2>Comparado a '+aa+'</h2><p class="note" style="margin:-6px 0 0">O mesmo período do ano passado, em reais. Na diferença, verde é melhor e vermelho é pior.</p>'+
     bloco("Mês",ini[m]+"/"+ano,ini[m]+"/"+aac,at.ent[m],ant.ent[m],at.sai[m],ant.sai[m])+
     bloco("Acumulado","Jan–"+ini[m]+"/"+ano,"Jan–"+ini[m]+"/"+aac,soma(at.ent,m),soma(ant.ent,m),soma(at.sai,m),soma(ant.sai,m));
 }
